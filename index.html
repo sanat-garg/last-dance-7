@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Previewer</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #007bff;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        #markdown-output {
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            overflow: auto;
+        }
+
+        /* Highlight.js theme (e.g., Atom One Light) */
+        .hljs {
+            display: block;
+            overflow-x: auto;
+            padding: 0.5em;
+            background: #f8f8f8;
+            color: #383a42;
+        }
+
+        .hljs-comment,
+        .hljs-quote {
+            color: #a0a1a7;
+            font-style: italic;
+        }
+
+        .hljs-doctag,
+        .hljs-keyword,
+        .hljs-selector-tag,
+        .hljs-tag {
+            color: #a626a4;
+        }
+
+        .hljs-literal,
+        .hljs-number {
+            color: #986801;
+        }
+
+        .hljs-variable,
+        .hljs-template-variable,
+        .hljs-attr {
+            color: #e45649;
+        }
+
+        .hljs-string,
+        .hljs-regexp {
+            color: #50a14f;
+        }
+
+        .hljs-title,
+        .hljs-symbol,
+        .hljs-bullet {
+            color: #4078f2;
+        }
+
+        .hljs-section,
+        .hljs-name {
+            color: #e45649;
+            font-weight: bold;
+        }
+
+        .hljs-meta {
+            color: #c18401;
+        }
+
+        .hljs-emphasis {
+            font-style: italic;
+        }
+
+        .hljs-strong {
+            font-weight: bold;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Markdown Previewer</h1>
+        <textarea id="markdown-input"># Sample Markdown
+
+This is a **basic** markdown editor.
+
+```javascript
+function helloWorld() {
+  console.log("Hello, world!");
+}
+
+helloWorld();
+```
+</textarea>
+        <div id="markdown-output"></div>
+    </div>
+
+    <script>
+        // Marked.js (minimal version)
+        function marked(src) {
+          try {
+            let tokens = [];
+            let token = {};
+            let links = {};
+        
+            // Tokenization
+            function lex(src) {
+              src = src
+                .replace(/\r\n|\r/g, '\n')
+                .replace(/\t/g, '    ')
+                .replace(/\u00a0/g, ' ')
+                .replace(/\u2424/g, '\n');
+        
+              let rules = {
+                newline: /^\n+/,
+                code: /^( {4}[^\n]+\n*)+/,
+                fences: /^ *(`{3,}|~{3,})[ \.]*(\S+)? *\n([\s\S]*?)\s*\1 *(?:\n+|$)/,
+                heading: /^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)/,
+                lheading: /^([^\n]+)\n *(=|-){2,} *(?:\n+|$)/,
+                blockquote: /^( *>[^\n]+(\n[^\n]+)*\n*)+/,
+                list: /^( *)([*+-]|\d+\.) +[^\n]+(\n[^\n]+)*\n*/,
+                hr: /^ *[-_*]{3,} *(?:\n+|$)/,
+                strong: /^\*\*([^*]+)\*\*|\_\_([^_]+)\_\_/,
+                em: /^\*([^*]+)\*|\_([^_]+)\_/,
+                codespan: /^`([^`]+)`/,
+                br: /^ {2,}\n/,
+                link: /^\[([^\n\]]+)\]\((.*?)\)/,
+                text: /^[^!\[]+?(?=\n|$)/,
+                escape: /^\\([\\`*{}\[\]()#+\-.!_>])/,
+                reflink: /^\[([^\n\]]+)\]\s*\[([^\]]*)\]/, //Added for Github flavoured markdown.
+                image: /^!\[([^\n\]]+)\]\((.*?)\)/
+              };
+        
+              function tok(type, src, lexer) {
+                if (src) {
+                    let match = src.match(type);
+                    if (match) {
+                        let token = {
+                            type: type.toString().replace(/^.*\/(.*)\/.*$/, "$1"),
+                            raw: match[0],
+                        };
+                        for (let i = 1; i < match.length; i++) {
+                            token[i] = match[i];
+                        }
+                        return token;
+                    }
+                }
+                return null;
+            }
+
+        
+              while (src) {
+                let found = false;
+                for (const type in rules) {
+                  let match = tok(rules[type], src, lex);
+                  if (match) {
+                    found = true;
+                    src = src.substring(match.raw.length);
+                    tokens.push(match);
+                    break;
+                  }
+                }
+        
+                if (!found) {
+                  src = src.substring(1);
+                }
+              }
+            }
+        
+            // Parsing
+            function parse(tokens) {
+              let output = '';
+              while (tokens.length > 0) {
+                let token = tokens.shift();
+                switch (token.type) {
+                  case 'newline':
+                    output += '<br>';
+                    break;
+                  case 'code':
+                    output += `<pre><code class="hljs">${escape(token[0].replace(/^ {4}/gm, ''))}</code></pre>`;
+                    break;
+                  case 'fences':
+                    output += `<pre><code class="hljs ${token[2] || ''}">${escape(token[3])}</code></pre>`;
+                    break;
+                  case 'heading':
+                    output += `<h${token[1].length}>${token[2]}</h${token[1].length}>`;
+                    break;
+                  case 'lheading':
+                    output += `<h${token[2] === '=' ? 1 : 2}>${token[1]}</h${token[2] === '=' ? 1 : 2}>`;
+                    break;
+                  case 'blockquote':
+                    output += `<blockquote>${parse(tokenizeBlockquote(token[0]))}</blockquote>`;
+                    break;
+                  case 'list':
+                  let listItems = token[0].split('\n').filter(item => item.trim() !== '');
+                  let listType = token[2].includes('.') ? 'ol' : 'ul';
+                  output += `<${listType}>`;
+                  for (let item of listItems) {
+                    let listItemText = item.replace(/^(\s*)([*+-]|\d+\.)\s+/, '');
+                    output += `<li>${listItemText}</li>`;
+                  }
+                  output += `</${listType}>`;
+                    break;
+                  case 'hr':
+                    output += '<hr>';
+                    break;
+                  case 'strong':
+                    output += `<strong>${token[1] || token[2]}</strong>`;
+                    break;
+                  case 'em':
+                    output += `<em>${token[1] || token[2]}</em>`;
+                    break;
+                  case 'codespan':
+                    output += `<code>${escape(token[1])}</code>`;
+                    break;
+                  case 'br':
+                    output += '<br>';
+                    break;
+                  case 'link':
+                    output += `<a href="${escape(token[2])}">${token[1]}</a>`;
+                    break;
+                    case 'image':
+                        output += `<img src="${escape(token[2])}" alt="${token[1]}">`;
+                        break;
+                  case 'reflink':
+                    // Handle reflink
+                    if (links[token[2]]) {
+                      output += `<a href="${escape(links[token[2]])}">${token[1]}</a>`;
+                    } else {
+                      output += `[${token[1]}] [${token[2]}]`;  // If link not found render the raw text.
+                    }
+                    break;
+                  case 'text':
+                    output += escape(token[0]);
+                    break;
+                  case 'escape':
+                    output += token[1];
+                    break;
+                  default:
+                    output += token.raw;
+                }
+              }
+              return output;
+            }
+            
+             function tokenizeBlockquote(text) {
+                let lines = text.split('\n').filter(line => line.trim() !== '');
+                let processedLines = lines.map(line => line.replace(/^>\s?/, ''));  // Remove '> ' or '>' from the start
+                return processedLines.join('\n');
+            }
+
+            function escape(html, encode) {
+              return html
+                .replace(!encode ? /&(?!#?\w+;)/g : /&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            }
+        
+            lex(src);
+            return parse(tokens);
+          } catch (error) {
+            console.error('Markdown parsing error:', error);
+            return '<p>Error rendering markdown.</p>';
+          }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const markdownInput = document.getElementById('markdown-input');
+            const markdownOutput = document.getElementById('markdown-output');
+
+            function updateOutput() {
+                const markdownText = markdownInput.value;
+                const html = marked(markdownText);
+                markdownOutput.innerHTML = html;
+                document.querySelectorAll('pre code').forEach(block => {
+                  hljs.highlightBlock(block);
+                });
+            }
+
+            markdownInput.addEventListener('input', updateOutput);
+            updateOutput(); // Initial render
+        });
+        
+        // Minimal highlight.js (modified to be self-contained)
+        const hljs = (function() {
+          const escape = (value, isAttributeMode) => {
+            return value.replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#x27;');
+          };
+
+          const span = (className, value) => {
+            return '<span class="' + className + '">' + value + '</span>';
+          };
+
+          const LANGUAGE_DEFINITIONS = {
+            javascript: {
+              keywords: 'and alias arguments as async await break case catch class continue const debugger default delete do else export extends finally for from function get if import in instanceof new of return set static super switch this throw try typeof var void while with yield let',
+              literal: 'true false null undefined',
+              built_in: 'Math String Number Date Array Boolean Function Object Error EvalError InternalError RangeError ReferenceError SyntaxError TypeError URIError eval isFinite isNaN parseFloat parseInt decodeURI decodeURIComponent encodeURI encodeURIComponent escape unescape',
+              contains: [
+                hljs.C_NUMBER_MODE,
+                hljs.C_QUOTE_STRING_MODE,
+                hljs.C_BLOCK_COMMENT_MODE,
+                hljs.C_LINE_COMMENT_MODE,
+                hljs.APOS_STRING_MODE,
+                hljs.BACKSLASH_ESCAPE
+              ]
+            }
+          };
+          const getLanguage = (name) => {
+              return LANGUAGE_DEFINITIONS[name];
+          }
+
+          function compileLanguage(language) {
+            if (language.compiled)
+                return language;
+
+            language.compiled = true;
+
+            if (language.contains) {
+                for (let i = 0; i < language.contains.length; i++) {
+                    if (typeof language.contains[i] === 'string') {
+                      if (LANGUAGE_DEFINITIONS[language.contains[i]]) {
+                        language.contains[i] = LANGUAGE_DEFINITIONS[language.contains[i]];
+                      } else {
+                        console.error("Missing Language Definition " + language.contains[i]);
+                      }
+                    }
+                    compileLanguage(language.contains[i]);
+                }
+            }
+            return language;
+          }
+
+          const highlight = (code, languageName) => {
+            const language = getLanguage(languageName);
+            if (!language) {
+                return { value: escape(code) };
+            }
+
+            const compiledLanguage = compileLanguage(language);
+            let result = { value: escape(code) };
+            try {
+              result = highlightInner(code, compiledLanguage);
+            } catch (e) {
+              console.error("Error highlighting: " + e);
+              result = { value: escape(code) };
+            }
+            return result;
+          };
+
+          function highlightInner(text, language) {
+            let result = '';
+            let index = 0;
+
+            function processKeywords(match, scope) {
+              const value = match[0];
+              if (language.keywords && language.keywords.indexOf(value) >= 0) {
+                return span('hljs-keyword', value);
+              }
+              if (language.literal && language.literal.indexOf(value) >= 0) {
+                return span('hljs-literal', value);
+              }
+              if (language.built_in && language.built_in.indexOf(value) >= 0) {
+                return span('hljs-built_in', value);
+              }
+              return value;
+            }
+
+            while (index < text.length) {
+              let foundMatch = false;
+
+              if (language.contains) {
+                for (let i = 0; i < language.contains.length; i++) {
+                  const mode = language.contains[i];
+
+                  if (mode.className && mode.begin) {
+                    const beginMatch = text.slice(index).match(mode.begin);
+                    if (beginMatch) {
+                      foundMatch = true;
+                      const matchedText = beginMatch[0];
+                      index += matchedText.length;
+
+                      let endMatch = null;
+                      let end = mode.end;
+                      if (end) {
+                        endMatch = text.slice(index).match(end);
+                      }
+
+                      if (endMatch) {
+                        const innerText = text.slice(index, index + endMatch.index);
+                        result += span('hljs-' + mode.className, highlightInner(innerText, mode).value);
+                        index += endMatch.index + endMatch[0].length;
+                      } else {
+                        result += span('hljs-' + mode.className, matchedText);
+                      }
+                      break;
+                    }
+                  } else if (mode.begin) {
+                    const beginMatch = text.slice(index).match(mode.begin);
+
+                    if (beginMatch) {
+                      foundMatch = true;
+                      let matchedText = beginMatch[0];
+                      index += matchedText.length;
+
+                      let value = processKeywords(beginMatch);
+                      result += value;
+                    }
+                  }
+                }
+              }
+
+              if (!foundMatch) {
+                let value = text[index];
+                index++;
+                result += value;
+              }
+            }
+
+            return { value: result };
+          }
+
+          const highlightBlock = (block) => {
+            const language = block.className.replace('language-', '');
+            const result = highlight(block.textContent, language);
+            block.innerHTML = result.value;
+          };
+
+          return {
+            highlightBlock: highlightBlock,
+            C_NUMBER_MODE: {
+                className: 'number',
+                begin: /\b\d+(\.\d+)?\b/
+            },
+            C_QUOTE_STRING_MODE: {
+              className: 'string',
+              begin: /"/, end: /"/,
+              contains: [hljs.BACKSLASH_ESCAPE]
+            },
+            APOS_STRING_MODE: {
+              className: 'string',
+              begin: /'/, end: /'/,
+              contains: [hljs.BACKSLASH_ESCAPE]
+            },
+            BACKSLASH_ESCAPE: {
+              className: 'string',
+              begin: /\\./
+            },
+            C_BLOCK_COMMENT_MODE: {
+              className: 'comment',
+              begin: /\/\*/, end: /\*\//
+            },
+            C_LINE_COMMENT_MODE: {
+              className: 'comment',
+              begin: /\/\//, end: /\n/, contains: []
+            }
+          };
+        })();
+    </script>
+</body>
+</html>
